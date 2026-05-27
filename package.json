@@ -1,0 +1,23 @@
+{
+  "name": "nasstec-app",
+  "version": "1.0.0",
+  "description": "NassTec OCR — Arabic/English text extraction app",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'Static HTML — no build needed'",
+    "sync": "npx cap sync android",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0"
+  },
+  "keywords": ["ocr", "arabic", "android", "capacitor"],
+  "author": "NassTec",
+  "license": "MIT"
+}
