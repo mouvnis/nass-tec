@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = 1024;
+
+// Background
+const bg = ctx.createRadialGradient(W/2, W/2, 0, W/2, W/2, W/2);
+bg.addColorStop(0, '#1a1600');
+bg.addColorStop(1, '#0a0a0a');
+ctx.fillStyle = bg;
+roundRect(ctx, 0, 0, W, W, 200);
+ctx.fill();
+
+// Gold gradient helper
+function goldGrad(x1,y1,x2,y2){
+  const g = ctx.createLinearGradient(x1,y1,x2,y2);
+  g.addColorStop(0,'#F5D78E');
+  g.addColorStop(0.5,'#C9A84C');
+  g.addColorStop(1,'#9A7A32');
+  return g;
+}
+
+ctx.strokeStyle = goldGrad(0,0,W,W);
+ctx.lineWidth = 18;
+ctx.beginPath();
+ctx.arc(W/2, W/2, 460, 0, Math.PI*2);
+ctx.stroke();
+
+// Document top cap
+ctx.fillStyle = goldGrad(300,180,700,420);
+ctx.beginPath();
+ctx.moveTo(300, 300); 
+ctx.quadraticCurveTo(512, 200, 724, 300);
+ctx.lineTo(740, 340); ctx.lineTo(260, 340); ctx.closePath();
+ctx.fill();
+
+// Document body
+ctx.fillStyle = goldGrad(260,340,740,720);
+roundRect(ctx, 256, 340, 488, 340, 40);
+ctx.fill();
+
+// Text lines
+ctx.fillStyle = '#0a0a0a';
+ctx.lineWidth = 0;
+for(let i=0; i<4; i++){
+  const y = 410 + i*64;
+  const w = i===3 ? 240 : 380;
+  roundRect(ctx, 320, y, w, 22, 11);
+  ctx.fill();
+}
+
+// Corner brackets
+ctx.strokeStyle = goldGrad(0,0,W,W);
+ctx.lineWidth = 28;
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+const brackets = [
+  [[200,330],[200,250],[280,250]],
+  [[824,330],[824,250],[744,250]],
+  [[200,710],[200,790],[280,790]],
+  [[824,710],[824,790],[744,790]],
+];
+brackets.forEach(pts => {
+  ctx.beginPath();
+  ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.lineTo(...pts[2]);
+  ctx.stroke();
+});
+
+console.log(c.toDataURL('image/png'));
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+</script>
+</body>
+</html>
