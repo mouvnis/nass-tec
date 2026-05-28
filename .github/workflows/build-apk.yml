@@ -1,3 +1,4 @@
+```yaml
 name: Build Android APK
 
 on:
@@ -29,6 +30,12 @@ jobs:
     - name: 📦 Install dependencies
       run: npm install
 
+    - name: 🎨 Install Capacitor Assets
+      run: npm install --save-dev @capacitor/assets
+
+    - name: 🖼️ Generate App Icons and Splash Screen
+      run: npx @capacitor/assets generate
+
     - name: 🔧 Install Capacitor CLI
       run: npm install -g @capacitor/cli
 
@@ -38,11 +45,11 @@ jobs:
           npx cap add android
         fi
 
+    - name: 🏗️ Build web assets
+      run: npm run build
+
     - name: 🔄 Sync Capacitor
       run: npx cap sync android
-
-    - name: 🎨 Generate NassTec app icon
-      run: node scripts/generate-icon.js
 
     - name: 📷 Add camera permissions to AndroidManifest
       run: |
@@ -88,3 +95,14 @@ jobs:
       run: |
         echo "APK built successfully!"
         ls -lh android/app/build/outputs/apk/debug/
+```
+
+Also upload this folder to your GitHub root:
+
+```txt
+assets/
+├── icon-only.png
+├── icon-foreground.png
+├── icon-background.png
+├── splash.png
+```
