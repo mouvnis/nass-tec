@@ -4,10 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0a0a0a">
-<meta http-equiv="Permissions-Policy" content="camera=*, microphone=*, speaker=*">
-<meta http-equiv="Feature-Policy" content="camera *; microphone *; speaker *">
 <title>نص تك — Nass Tec</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -1073,91 +1070,59 @@ function hideProg(){document.getElementById('progCard').classList.remove('show')
 // ══════════════════════════════════════════════════════════
 function initTTS(){
   if(!('speechSynthesis' in window)){
-    const s=document.getElementById('ttsStatus');
-    if(s) s.textContent='غير مدعوم — استخدم Chrome أو Safari';
+    document.getElementById('ttsStatus').textContent='غير مدعوم في هذا المتصفح';
     return;
   }
-  // Chrome needs a user-gesture to unlock audio — voices load async
-  const tryLoad=()=>{
-    const all=window.speechSynthesis.getVoices();
-    if(all.length){ loadVoices(all); return; }
-    // Safari/WebView: retry up to 20 times
-    let tries=0;
-    const poll=setInterval(()=>{
-      const v=window.speechSynthesis.getVoices();
-      if(v.length||tries++>20){ clearInterval(poll); if(v.length) loadVoices(v); }
-    },200);
-  };
-  window.speechSynthesis.onvoiceschanged=()=>{ loadVoices(window.speechSynthesis.getVoices()); };
-  tryLoad();
-  // Unlock TTS on first touch (required on iOS Safari & some Android WebViews)
-  document.addEventListener('touchend', function unlockTTS(){
-    const u=new SpeechSynthesisUtterance('');
-    u.volume=0;
-    window.speechSynthesis.speak(u);
-    document.removeEventListener('touchend', unlockTTS);
-    tryLoad();
-  }, {once:true});
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged=loadVoices;
 }
-function loadVoices(all){
-  if(!all||!all.length) return;
+function loadVoices(){
+  const all=window.speechSynthesis.getVoices();
+  if(!all.length) return;
   voices=all;
   const sel=document.getElementById('ttsVoice');
   if(!sel) return;
   const ar=all.filter(v=>v.lang.startsWith('ar'));
   const oth=all.filter(v=>!v.lang.startsWith('ar'));
   sel.innerHTML='<option value="-1">تلقائي (حسب النص)</option>';
-  if(ar.length){const g=document.createElement('optgroup');g.label='أصوات عربية';ar.forEach(v=>{const o=document.createElement('option');o.value=all.indexOf(v);o.textContent=v.name;g.appendChild(o);});sel.appendChild(g);}
-  if(oth.length){const g=document.createElement('optgroup');g.label='لغات أخرى';oth.slice(0,10).forEach(v=>{const o=document.createElement('option');o.value=all.indexOf(v);o.textContent=v.name+' ('+v.lang+')';g.appendChild(o);});sel.appendChild(g);}
+  if(ar.length){const g=document.createElement('optgroup');g.label='🇸🇦 أصوات عربية';ar.forEach(v=>{const o=document.createElement('option');o.value=all.indexOf(v);o.textContent=v.name+' ('+v.lang+')';g.appendChild(o);});sel.appendChild(g);}
+  if(oth.length){const g=document.createElement('optgroup');g.label='🌐 لغات أخرى';oth.forEach(v=>{const o=document.createElement('option');o.value=all.indexOf(v);o.textContent=v.name+' ('+v.lang+')';g.appendChild(o);});sel.appendChild(g);}
   if(ar.length) sel.value=all.indexOf(ar[0]);
-  const s=document.getElementById('ttsStatus');
-  if(s) s.textContent=ar.length>0?(ar.length+' صوت عربي ✓'):'لا يوجد صوت عربي — حاول Chrome';
+  document.getElementById('ttsStatus').textContent=ar.length>0?(ar.length+' صوت عربي متاح ✓'):'لا توجد أصوات عربية — يُفضل Chrome أو Safari';
 }
-function getTTSText(){ return curResult?.text||''; }
+function getTTSText(){
+  if(!curResult) return '';
+  // Prefer main extracted text for TTS (most useful for elderly)
+  return curResult.text||'';
+}
 function toggleTTS(){
-  if(ttsOn){stopTTS();return;}
+  if(ttsOn){pauseTTS();return;}
   const text=getTTSText();
   if(!text){showToast('لا يوجد نص بعد','err');return;}
   speak(text);
 }
 function speak(text){
   stopTTS();
-  if(!('speechSynthesis' in window)){showToast('TTS غير مدعوم','err');return;}
+  if(!('speechSynthesis' in window)) return;
   const isAr=/[\u0600-\u06FF]/.test(text);
-  // Split into chunks — iOS Safari cuts off after ~200 chars
-  const chunks=text.match(/.{1,180}(\s|$)/gs)||[text];
-  let ci=0;
-  function speakChunk(){
-    if(ci>=chunks.length){ttsOn=false;setTTSUI(false);return;}
-    const utter=new SpeechSynthesisUtterance(chunks[ci++]);
-    utter.rate=parseFloat(document.getElementById('ttsSpd')?.value||'0.85');
-    utter.pitch=1.0;
-    utter.volume=1.0;
-    const idx=parseInt(document.getElementById('ttsVoice')?.value);
-    if(!isNaN(idx)&&idx>=0&&voices[idx]){utter.voice=voices[idx];utter.lang=voices[idx].lang;}
-    else{utter.lang=isAr?'ar-SA':'en-US';const v=voices.find(v=>v.lang.startsWith(isAr?'ar':'en'));if(v)utter.voice=v;}
-    utter.onstart=()=>{ttsOn=true;setTTSUI(true);};
-    utter.onend=()=>speakChunk();
-    utter.onerror=()=>{ttsOn=false;setTTSUI(false);};
-    window.speechSynthesis.speak(utter);
-    // Chrome Android keepalive — prevents cutting off
-    if(/Android/.test(navigator.userAgent)){
-      const keepalive=setInterval(()=>{
-        if(!ttsOn){clearInterval(keepalive);return;}
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      },5000);
-    }
-  }
-  speakChunk();
+  const utter=new SpeechSynthesisUtterance(text);
+  utter.rate=parseFloat(document.getElementById('ttsSpd')?.value||'0.85');
+  utter.pitch=1.0;
+  const idx=parseInt(document.getElementById('ttsVoice')?.value);
+  if(!isNaN(idx)&&idx>=0&&voices[idx]){utter.voice=voices[idx];utter.lang=voices[idx].lang;}
+  else{utter.lang=isAr?'ar-SA':'en-US';const v=voices.find(v=>v.lang.startsWith(isAr?'ar':'en'));if(v)utter.voice=v;}
+  utter.onstart=()=>{ttsOn=true;setTTSUI(true);};
+  utter.onend=utter.onerror=()=>{ttsOn=false;setTTSUI(false);};
+  window.speechSynthesis.speak(utter);
 }
+function pauseTTS(){if('speechSynthesis' in window){window.speechSynthesis.pause();ttsOn=false;setTTSUI(false);document.getElementById('ttsLbl').textContent='استئناف';document.getElementById('ttsIco').className='fas fa-play';}}
 function stopTTS(){if('speechSynthesis' in window)window.speechSynthesis.cancel();ttsOn=false;setTTSUI(false);}
 function setTTSUI(on){
-  const b=document.getElementById('ttsBtn'),i=document.getElementById('ttsIco'),l=document.getElementById('ttsLbl');
+  const b=document.getElementById('ttsBtn');const i=document.getElementById('ttsIco');const l=document.getElementById('ttsLbl');
   if(!b)return;
   b.classList.toggle('playing',on);
   i.className=on?'fas fa-pause':'fas fa-play';
-  l.textContent=on?'إيقاف':'استمع للنص';
+  l.textContent=on?'إيقاف مؤقت':'استمع للنص';
 }
 function speakEl(id){const el=document.getElementById(id);if(!el)return;speak(el.textContent);}
 
@@ -1167,39 +1132,12 @@ function speakEl(id){const el=document.getElementById(id);if(!el)return;speak(el
 async function startCam(){
   try{
     if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
-    // Check permission state first if API available
-    if(navigator.permissions){
-      try{
-        const perm=await navigator.permissions.query({name:'camera'});
-        if(perm.state==='denied'){
-          showToast('الكاميرا محظورة — فعّلها من إعدادات المتصفح','err');
-          gb(); return;
-        }
-      }catch(e){}
-    }
-    const constraints={
-      video:{
-        facingMode:{ideal:facing},
-        width:{ideal:1920},
-        height:{ideal:1080}
-      },
-      audio:false
-    };
-    camStream=await navigator.mediaDevices.getUserMedia(constraints);
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}}});
     const video=document.getElementById('camFeed');
     video.srcObject=camStream;
     await video.play().catch(()=>{});
     if(autoSnap) startAutoDetect();
-  }catch(e){
-    if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
-      showToast('يرجى السماح بالوصول للكاميرا عند الطلب','err');
-    } else if(e.name==='NotFoundError'){
-      showToast('لم يتم العثور على كاميرا في هذا الجهاز','err');
-    } else {
-      showToast('خطأ في الكاميرا: '+e.message,'err');
-    }
-    gb();
-  }
+  }catch(e){showToast('تعذر الوصول للكاميرا: '+e.message,'err');gb();}
 }
 function stopCam(){
   stopAutoDetect();
