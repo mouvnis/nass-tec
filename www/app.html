@@ -1067,14 +1067,26 @@ function hideProg(){document.getElementById('progCard').classList.remove('show')
 
 // ══════════════════════════════════════════════════════════
 // TTS — Arabic-first Web Speech API
+// Chrome/Chromium WebView required for Arabic TTS on Android
 // ══════════════════════════════════════════════════════════
 function initTTS(){
   if(!('speechSynthesis' in window)){
-    document.getElementById('ttsStatus').textContent='غير مدعوم في هذا المتصفح';
+    const s=document.getElementById('ttsStatus');
+    if(s) s.textContent='غير مدعوم — يرجى تثبيت Google TTS من متجر Play';
     return;
   }
+  // Android WebView: wake up the speech engine (required for Chrome WebView)
+  try{
+    const warmup = new SpeechSynthesisUtterance('');
+    warmup.volume = 0;
+    window.speechSynthesis.speak(warmup);
+    window.speechSynthesis.cancel();
+  }catch(_){}
+
   loadVoices();
-  window.speechSynthesis.onvoiceschanged=loadVoices;
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+  // Android WebView: voices load async — retry several times
+  [500, 1200, 2500, 4000].forEach(t => setTimeout(loadVoices, t));
 }
 function loadVoices(){
   const all=window.speechSynthesis.getVoices();
@@ -1088,7 +1100,8 @@ function loadVoices(){
   if(ar.length){const g=document.createElement('optgroup');g.label='🇸🇦 أصوات عربية';ar.forEach(v=>{const o=document.createElement('option');o.value=all.indexOf(v);o.textContent=v.name+' ('+v.lang+')';g.appendChild(o);});sel.appendChild(g);}
   if(oth.length){const g=document.createElement('optgroup');g.label='🌐 لغات أخرى';oth.forEach(v=>{const o=document.createElement('option');o.value=all.indexOf(v);o.textContent=v.name+' ('+v.lang+')';g.appendChild(o);});sel.appendChild(g);}
   if(ar.length) sel.value=all.indexOf(ar[0]);
-  document.getElementById('ttsStatus').textContent=ar.length>0?(ar.length+' صوت عربي متاح ✓'):'لا توجد أصوات عربية — يُفضل Chrome أو Safari';
+  const statusEl=document.getElementById('ttsStatus');
+  if(statusEl) statusEl.textContent=ar.length>0?(ar.length+' صوت عربي متاح ✓'):'لا توجد أصوات عربية — تأكد من تثبيت Google TTS';
 }
 function getTTSText(){
   if(!curResult) return '';
@@ -1105,15 +1118,46 @@ function speak(text){
   stopTTS();
   if(!('speechSynthesis' in window)) return;
   const isAr=/[\u0600-\u06FF]/.test(text);
-  const utter=new SpeechSynthesisUtterance(text);
-  utter.rate=parseFloat(document.getElementById('ttsSpd')?.value||'0.85');
-  utter.pitch=1.0;
-  const idx=parseInt(document.getElementById('ttsVoice')?.value);
-  if(!isNaN(idx)&&idx>=0&&voices[idx]){utter.voice=voices[idx];utter.lang=voices[idx].lang;}
-  else{utter.lang=isAr?'ar-SA':'en-US';const v=voices.find(v=>v.lang.startsWith(isAr?'ar':'en'));if(v)utter.voice=v;}
-  utter.onstart=()=>{ttsOn=true;setTTSUI(true);};
-  utter.onend=utter.onerror=()=>{ttsOn=false;setTTSUI(false);};
-  window.speechSynthesis.speak(utter);
+
+  // ── Android WebView Arabic TTS fix: split into chunks ≤180 chars ──
+  const chunks=chunkText(text, 180);
+  let chunkIdx=0;
+
+  function speakNext(){
+    if(chunkIdx>=chunks.length){ttsOn=false;setTTSUI(false);return;}
+    const utter=new SpeechSynthesisUtterance(chunks[chunkIdx++]);
+    utter.rate=parseFloat(document.getElementById('ttsSpd')?.value||'0.85');
+    utter.pitch=1.0;
+    const selIdx=parseInt(document.getElementById('ttsVoice')?.value);
+    if(!isNaN(selIdx)&&selIdx>=0&&voices[selIdx]){
+      utter.voice=voices[selIdx];utter.lang=voices[selIdx].lang;
+    } else {
+      utter.lang=isAr?'ar-SA':'en-US';
+      const arV=voices.find(v=>v.lang==='ar-SA')||voices.find(v=>v.lang.startsWith('ar'));
+      if(isAr&&arV){utter.voice=arV;utter.lang=arV.lang;}
+    }
+    if(chunkIdx===1){utter.onstart=()=>{ttsOn=true;setTTSUI(true);};}
+    utter.onend=()=>speakNext();
+    utter.onerror=(e)=>{if(e.error!=='interrupted'){console.warn('TTS',e.error);}ttsOn=false;setTTSUI(false);};
+    // Android: cancel before each speak to reset stall
+    window.speechSynthesis.cancel();
+    setTimeout(()=>window.speechSynthesis.speak(utter), chunkIdx===1?0:60);
+  }
+  speakNext();
+}
+// Split at sentence/word boundaries for Android TTS chunking
+function chunkText(text,maxLen){
+  if(text.length<=maxLen)return[text];
+  const result=[];let remaining=text;
+  while(remaining.length>maxLen){
+    let cut=remaining.lastIndexOf('.',maxLen);
+    if(cut<50)cut=remaining.lastIndexOf(' ',maxLen);
+    if(cut<10)cut=maxLen;
+    result.push(remaining.slice(0,cut+1).trim());
+    remaining=remaining.slice(cut+1).trim();
+  }
+  if(remaining)result.push(remaining);
+  return result.filter(Boolean);
 }
 function pauseTTS(){if('speechSynthesis' in window){window.speechSynthesis.pause();ttsOn=false;setTTSUI(false);document.getElementById('ttsLbl').textContent='استئناف';document.getElementById('ttsIco').className='fas fa-play';}}
 function stopTTS(){if('speechSynthesis' in window)window.speechSynthesis.cancel();ttsOn=false;setTTSUI(false);}
@@ -1131,13 +1175,38 @@ function speakEl(id){const el=document.getElementById(id);if(!el)return;speak(el
 // ══════════════════════════════════════════════════════════
 async function startCam(){
   try{
+    // ── Step 1: Check/request camera permission (Android Capacitor + browser) ──
+    if(navigator.permissions){
+      try{
+        const perm = await navigator.permissions.query({name:'camera'});
+        if(perm.state === 'denied'){
+          showToast('الكاميرا محظورة — افتح إعدادات التطبيق وامنح إذن الكاميرا','err');
+          gb(); return;
+        }
+      }catch(_){}
+    }
+    // ── Step 2: Stop any existing stream ──
     if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
-    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}}});
+    // ── Step 3: Request camera stream (triggers OS permission dialog on first use) ──
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:facing, width:{ideal:1920}, height:{ideal:1080}}
+    });
     const video=document.getElementById('camFeed');
     video.srcObject=camStream;
     await video.play().catch(()=>{});
     if(autoSnap) startAutoDetect();
-  }catch(e){showToast('تعذر الوصول للكاميرا: '+e.message,'err');gb();}
+  }catch(e){
+    let msg = 'تعذر الوصول للكاميرا';
+    if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
+      msg='❌ تم رفض إذن الكاميرا\nافتح: إعدادات ← التطبيقات ← NassTec ← الأذونات ← امنح الكاميرا';
+    } else if(e.name==='NotFoundError'){
+      msg='لا توجد كاميرا في هذا الجهاز';
+    } else if(e.name==='NotReadableError'){
+      msg='الكاميرا مستخدمة من تطبيق آخر، أغلقه وحاول مجدداً';
+    }
+    showToast(msg,'err');
+    gb();
+  }
 }
 function stopCam(){
   stopAutoDetect();
