@@ -17,10 +17,16 @@
     "@capacitor/status-bar": "^6.0.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.0.0",
     "canvas": "^2.11.2"
   },
-  "keywords": ["ocr", "arabic", "android", "capacitor"],
+  "keywords": [
+    "ocr",
+    "arabic",
+    "android",
+    "capacitor"
+  ],
   "author": "NassTec",
   "license": "MIT"
 }
