@@ -95,14 +95,3 @@ jobs:
       run: |
         echo "APK built successfully!"
         ls -lh android/app/build/outputs/apk/debug/
-```
-
-Also upload this folder to your GitHub root:
-
-```txt
-assets/
-├── icon-only.png
-├── icon-foreground.png
-├── icon-background.png
-├── splash.png
-```
